@@ -1,0 +1,51 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Seed Podium</title>
+<style>body{max-width:760px;margin:8vh auto;padding:0 24px;background:#f4f5ef;color:#182c27;font:18px/1.55 system-ui}h1{font: bold 3em Georgia;margin:0}button,select{font:inherit;padding:.4em .8em}button{background:#185a46;color:white;border:0;border-radius:5px}table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}td,th{text-align:left;padding:.45em;border-bottom:1px solid #bdcbc2}article{overflow-x:auto}output{display:block;margin:1em 0;font-weight:600}</style>
+<h1>Seed Podium</h1><p>How good can the leaderboard look when every run uses the same training code?</p>
+<label>Training runs <select id="budget"><option>5</option><option selected>10</option><option>30</option></select></label> <button id="run">Run experiment</button>
+<output id="summary" aria-live="polite">Choose a budget and run the experiment.</output>
+<article><table><thead><tr><th>Seed</th><th>Validation accuracy</th><th>Best so far</th></tr></thead><tbody id="rows"></tbody></table></article>
+<script>
+function random(seed) {
+  return () => {
+    seed = (Math.imul(1664525, seed) + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+}
+function dataset(seed, size) {
+  const draw = random(seed);
+  return Array.from({length:size}, () => {
+    const x = 2*draw()-1, y = 2*draw()-1;
+    return [x, y, Number(x + y + 1.2*(draw()-.5) > 0)];
+  });
+}
+const train = dataset(71, 100), validation = dataset(403, 40), holdout = dataset(991, 2000);
+function fit(seed) {
+  const draw = random(seed);
+  let a=0, b=0, bias=0;
+  for (let step=0; step<80; step++) {
+    const [x,y,target] = train[Math.floor(draw()*train.length)];
+    const update = .25*(target - 1/(1+Math.exp(-(a*x+b*y+bias))));
+    a += update*x; b += update*y; bias += update;
+  }
+  return ([x,y]) => Number(a*x+b*y+bias >= 0);
+}
+function accuracy(model, data) {
+  return 100*data.filter(point => model(point) === point[2]).length/data.length;
+}
+function experiment(budget) {
+  const trials = [];
+  for (let seed=1; seed<=budget; seed++) trials.push({seed, score:accuracy(fit(seed), validation)});
+  const winner = trials.reduce((best, trial) => trial.score > best.score ? trial : best);
+  return {trials, winner, independent:accuracy(fit(winner.seed), holdout)};
+}
+document.querySelector('#run').onclick = () => {
+  const {trials,winner,independent} = experiment(Number(document.querySelector('#budget').value));
+  let best=0;
+  document.querySelector('#rows').innerHTML = trials.map(({seed,score}) => {
+    best=Math.max(best,score);
+    return '<tr><td>'+seed+'</td><td>'+score.toFixed(1)+'%</td><td>'+best.toFixed(1)+'%</td></tr>';
+  }).join('');
+  document.querySelector('#summary').textContent = 'Winner: seed '+winner.seed+' scored '+winner.score.toFixed(1)+'% on validation and '+independent.toFixed(1)+'% on independent data.';
+};
+</script></html>
